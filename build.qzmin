@@ -1,0 +1,12 @@
+{
+	projects:[
+		{
+			name:'lib.js',
+			target:'../lib.js',
+			include:[
+				'project/util.js'
+			]
+		}
+	],
+	level:0
+}
