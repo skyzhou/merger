@@ -1,12 +1,13 @@
 {
 	projects:[
 		{
-			name:'lib.js',
-			target:'../lib.js',
+			target:'test/index.js',
 			include:[
-				'project/util.js'
+				'test/src/js/'
+			],
+			template:[
+				'test/src/template/'
 			]
 		}
-	],
-	level:0
+	]
 }

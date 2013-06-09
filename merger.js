@@ -2,6 +2,7 @@
  * @fileOverview merger.js
  * @author sky
  * @version 0.9
+ * 2013/05/27:增加目录遍历读取、增加重置命令(reset)、文件不存在时候的容错
  */
 var BUILD_FILE	='build.qzmin';
 var ROOT_DIR	=process.argv[2]||__dirname;
@@ -9,53 +10,52 @@ var JAR_ROOT	=process.argv[3]||__dirname;
 var fs			=require('fs');
 var path		=require('path');
 var proc		=require("child_process");
-var IS_RUN_COMPILER	=false;
-var MEM			=0;
-var UPDATE_HIS	={};
+var RELEASE_FILE=[];
+var PROCESS_MANAGER = [];
+var MSG;
+
 /**
+ * 屏幕输出管理
  * @class Msg
  */
 var Msg=function(){
-	this.log=function(msg){
-		console.log(msg+"\r\n");
+	this.log=function(msg,type){
+		type = type || 0;
+		var pre = {0:'*',1:'!!!'}
+		console.log(pre[type]+msg+"\r\n");
 	};
 	this.hello=function(dir){
 		console.log("/*****开始监听目录:"+dir+"*****/\r\n");
 	}
 }
+
 /**
  * @class Map 根据路径和对应的配置文件，生成监听map
  * @param {String} dir 路径
  * @param {Object} build 配置
  */
 var Map=function(dir,build){
+	
+	var that = this;
+
 	var _projects=build.projects,	//工程配置
 		_path=dir+'/',				//根路径
 		_mainMap={},				//{合并后的文件名:{include:JS文件数组,template:模版文件数组}}
 		_fileMap={},				//{合并前的单个文件名:{target:合并后的文件名,time:最后更新时间,type:JS/模版}}
 		_tmplMap={},				//{合并后的文件名:模版字符串}
-		_level=parseInt(build.level)||0,		//0,不压缩 1、简单压缩  2、深度压缩		(3、已压缩过)	
-		_self=this,
-		msg=new Msg();
-	
-	//如果发现压缩选项	且当前未启动压缩监听
-	if(_level&&!IS_RUN_COMPILER){
-		IS_RUN_COMPILER=true;
-		compiler()
-	}
-	
+		_self=this;
+
 		
 	//根据工程配置初始化map
 	this._init=function(){
 		
-		msg.log('发现配置文件：'+path.normalize(_path+BUILD_FILE));
+		MSG.log('发现配置文件：'+path.normalize(_path+BUILD_FILE));
 		
 		//遍历工程
 		_projects.forEach(function(item){		
 			_mainMap[item.target]={};
-			_mainMap[item.target].include=item.include||[];
-			_mainMap[item.target].template=item.template||[];
-			
+			_mainMap[item.target].include=that.getFileList(item.include);
+			_mainMap[item.target].template=that.getFileList(item.template);
 			//一个文件可能在多个工程中被使用
 			_mainMap[item.target].include.forEach(function(_item){
 				_fileMap[_item]=_fileMap[_item]||{target:[],time:+fs.statSync(_path+_item).mtime,type:'js'};
@@ -66,33 +66,66 @@ var Map=function(dir,build){
 				_fileMap[_item].target.push(item.target);
 				_self.initTemp(_item,[item.target]);
 			});
-			
+
+			RELEASE_FILE.push(_path+item.target);
 		})
 		
+		
+
 		//初始化合并
 		for(var p in _mainMap){
 			this.merge(_mainMap[p].include[0],[p],'js',new Date());
 		}
 		
-		
 		this.listen();
 		
 	};
+
+	//获取文件列表
+	this.getFileList = function(fileList){
+		var files = [];
+		fileList && fileList.forEach(function(item){
+			
+			if(fs.existsSync(_path+'/'+item)){
+
+				if(fs.statSync(_path+item).isDirectory()){
+					var items = fs.readdirSync(_path+item);
+					items.forEach(function(_item){
+						files.push(item+'/'+_item);
+					})
+				}
+				else{
+					files.push(item);
+				}
+			}
+			else{
+				MSG.log(_path+'/'+item+' does not exist',1);
+			}
+		});
+
+		return files;
+	}
 	
 	//定时监听_fileMap发现文件更新
 	this.listen=function(){
-		setInterval(function(){
+		var tm = setInterval(function(){
 			for(var p in _fileMap){
-				var mtime=+fs.statSync(_path+p).mtime;		
-				mtime!=_fileMap[p].time&&function(){
-						msg.log('源文件有修改：'+path.normalize(_path+p));
-						_fileMap[p].time=mtime;
-						_self.merge(p,_fileMap[p].target,_fileMap[p].type,mtime);
-				}()
-
+				//先检测文件是否存在
+				if(fs.existsSync(_path+p)){
+					var mtime=+fs.statSync(_path+p).mtime;		
+					mtime!=_fileMap[p].time&&function(){
+							MSG.log('源文件有修改：'+path.normalize(_path+p));
+							_fileMap[p].time=mtime;
+							_self.merge(p,_fileMap[p].target,_fileMap[p].type,mtime);
+					}()
+				}
+				else{
+					MSG.log(_path+p+' does not exist',1);
+				}
 			}
 			
 		},1000);
+		PROCESS_MANAGER.push(tm);
 	};
 	//初始化模版变量
 	this.initTemp=function(file,target){
@@ -126,8 +159,13 @@ var Map=function(dir,build){
 			//用于存储当前唯一文件名，防读写冲突
 			//合并JS
 			_mainMap[item].include.forEach(function(item){
-				//pool.push("//@file\t\t\t"+item+"\r\n//@Last-Modified\t"+new Date(mtime));
-				pool.push(fs.readFileSync(_path+item));
+				
+				if(fs.existsSync(_path+item)){
+					pool.push(fs.readFileSync(_path+item));
+				}
+				else{
+					MSG.log(_path+item+' does not exist',1);
+				}
 			});
 			
 			var codes=pool.join("\r\n");
@@ -140,9 +178,7 @@ var Map=function(dir,build){
 			var fileName=_path+item;
 			fs.writeFileSync(fileName,codes);
 			
-			//如果是新发现的，则加入列表
-			!UPDATE_HIS[fileName]&&(UPDATE_HIS[fileName]=_level);
-			msg.log("文件合并完成："+path.normalize(fileName));
+			MSG.log("文件合并完成："+path.normalize(fileName));
 		});
 		
 		
@@ -150,8 +186,11 @@ var Map=function(dir,build){
 	this._init();
 }
 
-//以当前目录为启动，递归查找，发现 build.qzmin则录入map
-var run=function(dir){
+/**
+ * 根据指定的目录遍历查找“build.qzmin”，如果查找到，建立map进行变更监听
+ * @param {String} dir 目录地址
+ */
+var merger=function(dir){
 	var buildFile=dir+'/'+BUILD_FILE;
 	fs.exists(buildFile,function(exists){
 		exists&&fs.readFile(buildFile,function(err,data){
@@ -160,43 +199,95 @@ var run=function(dir){
 	});
 	fs.readdir(dir,function(err,files){
 		files&&files.length&&files.forEach(function(item){
-			fs.statSync(dir+'/'+item).isDirectory()&&run(dir+'/'+item);
+			fs.statSync(dir+'/'+item).isDirectory()&&merger(dir+'/'+item);
 		});
 	});
 }
-//压缩
-var compiler=function(){
-	var msg=new Msg();
-	var comp=function(fileName,level){
-		UPDATE_HIS[fileName]=3;
-		msg.log("正在压缩文件："+path.normalize(fileName));
-		var compiler=proc.exec('java -jar '+JAR_ROOT+'/compiler.jar '+level+' --js '+fileName,function(error,stdout,stderr){
-			if(error){
-				msg.log("文件压缩错误"+error);
-			}
-			else{
-				fs.writeFileSync(fileName,stdout);
-				//已压缩
-				msg.log("文件压缩完成："+path.normalize(fileName));
-			}
-			
-		});
-	}
-	//压缩消耗性能，只检测未被压缩过的合并后的文件
-	setInterval(function(){
-		for(var fileName in UPDATE_HIS){
-			var level=UPDATE_HIS[fileName];
-			var cmd=['','--compilation_level WHITESPACE_ONLY',''];
-			//如果存在切未压缩过
-			if(level&&level<3){
-				comp(fileName,cmd[level]);
-			}
+
+/**
+ * GCC 压缩选项
+ * @param {Number} level 压缩级别 1-普通压缩，2-深度压缩
+ */
+var compiler=function(level){
+	var exec=function(fileName,option){
+		MSG.log("正在压缩文件："+path.normalize(fileName));
+		try{
+			var compiler=proc.exec('java -jar '+JAR_ROOT+'/compiler.jar '+option+' --js '+fileName,function(error,stdout,stderr){
+				if(error){
+					MSG.log("文件压缩错误"+error,1);
+				}
+				else{
+					fs.writeFileSync(fileName,stdout);
+					//已压缩
+					MSG.log("文件压缩完成："+path.normalize(fileName));
+				}
+				
+			});
 		}
-	},1000);
+		catch(e){
+			MSG.log("文件压缩错误"+e.message,1);
+		}
+		
+	}
+
+	var option = {1:"--compilation_level WHITESPACE_ONLY",2:''}[level];
+
+	RELEASE_FILE.forEach(function(item){
+		exec(item,option);
+	});
+
 }
-//初始化，欢迎信息，启动查找
-var init=function(){
-	(new Msg()).hello(ROOT_DIR);
-	run(ROOT_DIR);
-}
-init();
+
+/**
+ * 命令解析
+ * @param {String} cmd 命令
+ */
+var command = {
+	'reset':function(){
+		PROCESS_MANAGER.forEach(function(tm){
+			clearInterval(tm);
+		});
+
+		RELEASE_FILE = [];
+
+		MSG.log('重启中...');
+		merger(ROOT_DIR);
+	},
+	'gcc':function(level){
+		level = level == 2 ? 2 :1;
+		compiler(level);
+	},
+	'server':function(port){
+
+	}
+};
+
+//初始化，欢迎信息，启动merger
+(function(){
+	
+	if(!MSG){
+		MSG = new Msg();
+	}
+	
+	MSG.hello(ROOT_DIR);
+	merger(ROOT_DIR);
+
+
+
+	process.stdin.resume();
+	process.stdin.setEncoding('utf8');
+
+	process.stdin.on('data', function(chunk) {
+		
+		var cmd = chunk.replace(/\r\n/g,'').replace(/[\r\n]/g,'').replace(/\s+/," ").trim().split(' ');
+		if(command[cmd[0]]){
+			command[cmd[0]].apply(this,cmd.slice(1));
+		}
+
+	});
+})();
+
+
+
+
+
