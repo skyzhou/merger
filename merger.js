@@ -2,7 +2,6 @@
  * @fileOverview merger.js
  * @author sky
  * @version 0.9
- * 2013/05/27:增加目录遍历读取、增加重置命令(reset)、文件不存在时候的容错
  */
 var BUILD_FILE	='build.qzmin';
 var ROOT_DIR	=process.argv[2]||__dirname;
