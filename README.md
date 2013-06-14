@@ -56,8 +56,12 @@ merger.js是什么？
 
 window平台的merger.exe
 -------------
-
- 	merger.exe = node.exe + merger.js + gcc
+	可以使用Quick Batch File讲node.exe,merger.js,compiler.jar打包生成exe文件。
+	
+	//
+	@echo off
+	cmd /k %MYFILES%/node.exe %MYFILES%/merger.js  %cd%  %MYFILES%
+ 	//
 
  	1、直接将merger.exe拷贝到工程根目录或上级目录，双击运行，即自动运行合并监听。
  	2、在运行界面输入“gcc 1”将对生成的发布文件进行平台压缩（去除换行和注释），输入“gcc 2”进行深度压缩（变量替换，逻辑优化）。
