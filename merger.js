@@ -90,6 +90,9 @@ var Map=function(dir,build){
 				if(fs.statSync(_path+item).isDirectory()){
 					var items = fs.readdirSync(_path+item);
 					items.forEach(function(_item){
+						if(/^\..+/.test(_item)){
+							return
+						}
 						files.push(item+'/'+_item);
 					})
 				}
