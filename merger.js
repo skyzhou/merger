@@ -11,6 +11,7 @@ var path		=require('path');
 var proc		=require("child_process");
 var RELEASE_FILE=[];
 var PROCESS_MANAGER = [];
+var VERSION 	="0.90";
 var MSG;
 
 /**
@@ -291,6 +292,16 @@ var command = {
 	},
 	'publish':function(){
 		publish();
+	},
+	'version':function(){
+		MSG.log(VERSION)
+	},
+	'help':function(){
+		MSG.log("******************")
+		MSG.log("gcc\t\t压缩目标文件")
+		MSG.log("reset\t\t重启")
+		MSG.log("publish\t发布目标文件")
+		MSG.log("version\t获取版本号")
 	}
 };
 
