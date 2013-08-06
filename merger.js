@@ -41,8 +41,7 @@ var Map=function(dir,build){
 		_path=dir+'/',				//根路径
 		_mainMap={},				//{合并后的文件名:{include:JS文件数组,template:模版文件数组}}
 		_fileMap={},				//{合并前的单个文件名:{target:合并后的文件名,time:最后更新时间,type:JS/模版}}
-		_tmplMap={},				//{合并后的文件名:模版字符串}
-		_self=this;
+		_tmplMap={};				//{合并后的文件名:模版字符串}
 
 		
 	//根据工程配置初始化map
@@ -52,21 +51,28 @@ var Map=function(dir,build){
 		
 		//遍历工程
 		_projects.forEach(function(item){		
+
 			_mainMap[item.target]={};
 			_mainMap[item.target].include=that.getFileList(item.include);
 			_mainMap[item.target].template=that.getFileList(item.template);
+
 			//一个文件可能在多个工程中被使用
 			_mainMap[item.target].include.forEach(function(_item){
-				_fileMap[_item]=_fileMap[_item]||{target:[],time:+fs.statSync(_path+_item).mtime,type:'js'};
+				_fileMap[_item]=_fileMap[_item]||{target:[],time:+fs.statSync(that.getRealPath(_item)).mtime,type:'js'};
 				_fileMap[_item].target.push(item.target);
-			});
-			_mainMap[item.target].template.forEach(function(_item){
-				_fileMap[_item]=_fileMap[_item]||{target:[],time:+fs.statSync(_path+_item).mtime,type:'tmpl'};
-				_fileMap[_item].target.push(item.target);
-				_self.initTemp(_item,[item.target]);
 			});
 
-			RELEASE_FILE.push(_path+item.target);
+			_mainMap[item.target].template.forEach(function(_item){
+				_fileMap[_item]=_fileMap[_item]||{target:[],time:+fs.statSync(that.getRealPath(_item)).mtime,type:'tmpl'};
+				_fileMap[_item].target.push(item.target);
+				that.initTemp(_item,[item.target]);
+			});
+
+			RELEASE_FILE.push({
+				compiler:that.getRealPath(item.compiler || item.target),
+				publish:that.getRealPath(item.publish || item.target),
+				src:that.getRealPath(item.target)
+			});
 		})
 		
 		
@@ -79,17 +85,20 @@ var Map=function(dir,build){
 		this.listen();
 		
 	};
-
+	this.getRealPath = function(p){
+		return path.normalize(/\:/.test(p)?p:_path+p);
+	}
 	//获取文件列表
 	this.getFileList = function(fileList){
 		var files = [];
 		fileList && fileList.forEach(function(item){
-			
-			if(fs.existsSync(_path+'/'+item)){
+			if(fs.existsSync(that.getRealPath('/'+item))){
+				if(fs.statSync(that.getRealPath(item)).isDirectory()){
+					
+					var items = fs.readdirSync(that.getRealPath(item));
 
-				if(fs.statSync(_path+item).isDirectory()){
-					var items = fs.readdirSync(_path+item);
 					items.forEach(function(_item){
+
 						if(/^\..+/.test(_item)){
 							return
 						}
@@ -101,10 +110,10 @@ var Map=function(dir,build){
 				}
 			}
 			else{
-				MSG.log(_path+'/'+item+' does not exist',1);
+				MSG.log(that.getRealPath('/'+item)+' does not exist',1);
 			}
 		});
-
+		
 		return files;
 	}
 	
@@ -113,16 +122,16 @@ var Map=function(dir,build){
 		var tm = setInterval(function(){
 			for(var p in _fileMap){
 				//先检测文件是否存在
-				if(fs.existsSync(_path+p)){
-					var mtime=+fs.statSync(_path+p).mtime;		
+				if(fs.existsSync(that.getRealPath(p))){
+					var mtime=+fs.statSync(that.getRealPath(p)).mtime;		
 					mtime!=_fileMap[p].time&&function(){
-							MSG.log('源文件有修改：'+path.normalize(_path+p));
+							MSG.log('源文件有修改：'+path.normalize(that.getRealPath(p)));
 							_fileMap[p].time=mtime;
-							_self.merge(p,_fileMap[p].target,_fileMap[p].type,mtime);
+							that.merge(p,_fileMap[p].target,_fileMap[p].type,mtime);
 					}()
 				}
 				else{
-					MSG.log(_path+p+' does not exist',1);
+					MSG.log(that.getRealPath(p)+' does not exist',1);
 				}
 			}
 			
@@ -131,7 +140,7 @@ var Map=function(dir,build){
 	};
 	//初始化模版变量
 	this.initTemp=function(file,target){
-		var _tmplStr=fs.readFileSync(_path+file),
+		var _tmplStr=fs.readFileSync(that.getRealPath(file)),
 			_pat=/<template[^>]*name=['"]([\w.]*?)['"][^>]*>([\s\S]*?)<\/template>/ig,
 			_ret,
 			_str;
@@ -162,11 +171,11 @@ var Map=function(dir,build){
 			//合并JS
 			_mainMap[item].include.forEach(function(item){
 				
-				if(fs.existsSync(_path+item)){
-					pool.push(fs.readFileSync(_path+item));
+				if(fs.existsSync(that.getRealPath(item))){
+					pool.push(fs.readFileSync(that.getRealPath(item)));
 				}
 				else{
-					MSG.log(_path+item+' does not exist',1);
+					MSG.log(_that.getRealPath(item)+' does not exist',1);
 				}
 			});
 			
@@ -177,7 +186,7 @@ var Map=function(dir,build){
 				codes=codes.replace(new RegExp(p.replace(/\./g,"\\."),'g'),"'"+_tmplMap[item][p]+"'");
 			}
 			
-			var fileName=_path+item;
+			var fileName=that.getRealPath(item);
 			fs.writeFileSync(fileName,codes);
 			
 			MSG.log("文件合并完成："+path.normalize(fileName));
@@ -211,17 +220,17 @@ var merger=function(dir){
  * @param {Number} level 压缩级别 1-普通压缩，2-深度压缩
  */
 var compiler=function(level){
-	var exec=function(fileName,option){
-		MSG.log("正在压缩文件："+path.normalize(fileName));
+	var exec=function(sFileName,cFileName,option){
+		MSG.log("正在压缩文件："+path.normalize(sFileName));
 		try{
-			var compiler=proc.exec('java -jar '+JAR_ROOT+'/compiler.jar '+option+' --js '+fileName,function(error,stdout,stderr){
+			var compiler=proc.exec('java -jar '+JAR_ROOT+'/compiler.jar '+option+' --js '+sFileName,function(error,stdout,stderr){
 				if(error){
 					MSG.log("文件压缩错误"+error,1);
 				}
 				else{
-					fs.writeFileSync(fileName,stdout);
+					fs.writeFileSync(cFileName,stdout);
 					//已压缩
-					MSG.log("文件压缩完成："+path.normalize(fileName));
+					MSG.log("文件压缩完成："+path.normalize(cFileName));
 				}
 				
 			});
@@ -235,11 +244,29 @@ var compiler=function(level){
 	var option = {1:"--compilation_level WHITESPACE_ONLY",2:''}[level];
 
 	RELEASE_FILE.forEach(function(item){
-		exec(item,option);
+		exec(item.src,item.compiler,option);
 	});
 
 }
-
+var publish = function(){
+	RELEASE_FILE.forEach(function(item){	
+		fs.readFile(item.src,function(err,data){
+			if(err){
+				MSG.log("源文件读取失败："+err.message,1);
+			}
+			else{
+				fs.writeFile(item.publish,data+"",function(err){
+					if(err){
+						MSG.log("文件发布失败："+err.message,1);
+					}
+					else{
+						MSG.log("文件发布成功："+item.publish);
+					}
+				})
+			}
+		})
+	});
+}
 /**
  * 命令解析
  * @param {String} cmd 命令
@@ -261,6 +288,9 @@ var command = {
 	},
 	'server':function(port){
 
+	},
+	'publish':function(){
+		publish();
 	}
 };
 
@@ -288,7 +318,6 @@ var command = {
 
 	});
 })();
-
 
 
 
