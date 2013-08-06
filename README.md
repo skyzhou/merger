@@ -18,6 +18,8 @@ merger.js是什么？
 		projects:[
 			{
 				target:'test/index.js',
+				compiler:'test/index_min.js',
+				publish:'test/release/index.js',
 				include:[
 					'test/src/js/'
 				],
@@ -30,6 +32,8 @@ merger.js是什么？
 
 	-- projects	：工程列表。允许在一个“build.qzmin”配置多个工程，数组
 	-- target 	：合并生成的发布文件路径（相对路径参照 “build.qzmin” 文件路径，以下相同），工程内唯一，字符串
+	-- compiler	: 压缩后生成的所在文件路径
+	-- publish	: 发布生成的文件路径
 	-- include	：参与合并的JS文件路径列表，支持文件夹和单个文件路径（文件夹下所有JS文件参与合并），数组
 	-- template ：参与合并的模版路径列表，支持文件夹和单个文件路径，（文件夹下所有模版文件参与合并），数组
 
