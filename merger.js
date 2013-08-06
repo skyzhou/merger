@@ -71,7 +71,7 @@ var Map=function(dir,build){
 
 			RELEASE_FILE.push({
 				compiler:that.getRealPath(item.compiler || item.target),
-				publish:that.getRealPath(item.publish || item.target),
+				publish:item.publish?that.getRealPath(item.publish):'',
 				src:that.getRealPath(item.target)
 			});
 		})
@@ -255,7 +255,7 @@ var publish = function(){
 			if(err){
 				MSG.log("源文件读取失败："+err.message,1);
 			}
-			else{
+			else if(item.publish){
 				fs.writeFile(item.publish,data+"",function(err){
 					if(err){
 						MSG.log("文件发布失败："+err.message,1);
