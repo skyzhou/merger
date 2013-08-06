@@ -2,6 +2,8 @@
 	projects:[
 		{
 			target:'test/index.js',
+			compiler:'test/index_min.js',
+			publish:'test/release/index.js',
 			include:[
 				'test/src/js/'
 			],
