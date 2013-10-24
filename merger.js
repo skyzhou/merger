@@ -170,24 +170,48 @@ var Map=function(dir,build){
 		target.forEach(function(item){
 			//用于存储当前唯一文件名，防读写冲突
 			//合并JS
-			_mainMap[item].include.forEach(function(item){
+			//应F总需求，这里做一个include为空的判断。
+			//如果include为空，这把当前target的代码作为合并后的代码，来进行模版匹配
+			//新增代码中模版标识为/*TPL.XX.YY*/somecode/**/的模式匹配
+			var fileName=that.getRealPath(item),code;
+			if(_mainMap[item].include.length){
+				_mainMap[item].include.forEach(function(item){
 				
-				if(fs.existsSync(that.getRealPath(item))){
-					pool.push(fs.readFileSync(that.getRealPath(item)));
-				}
-				else{
-					MSG.log(_that.getRealPath(item)+' does not exist',1);
-				}
-			});
-			
-			var codes=pool.join("\r\n");
+					if(fs.existsSync(that.getRealPath(item))){
+						pool.push(fs.readFileSync(that.getRealPath(item)));
+					}
+					else{
+						MSG.log(_that.getRealPath(item)+' does not exist',1);
+					}
+				});
+				
+				codes=pool.join("\r\n");
+			}
+			else{
+				codes = fs.readFileSync(fileName)+'';
+			}
 
+			var tmp = {},i=0;
 			
 			for(var p in _tmplMap[item]){
-				codes=codes.replace(new RegExp(p.replace(/\./g,"\\."),'g'),"'"+_tmplMap[item][p]+"'");
+				var n = p.replace(/\./g,"\\.");
+				var r = new RegExp("\\/\\*<"+n+">\\*\\/(.*?)\\/\\*<\\/"+n+">\\*\\/",'g')
+				codes=codes.replace(r,function(match){
+					i++;
+					tmp[i] = "/*<"+p+">*/'"+_tmplMap[item][p]+"'/*</"+p+">*/";
+					return '<@'+i+'@>';
+				});
+				codes=codes.replace(new RegExp(p.replace(/\./g,"\\."),'g'),function(match){
+					i++;
+					tmp[i] = "/*<"+p+">*/'"+_tmplMap[item][p]+"'/*</"+p+">*/";
+					return '<@'+i+'@>';
+				});
+				codes=codes.replace(/<@(\d+)@>/g,function(match,i){
+					return tmp[i];
+				}); 
 			}
 			
-			var fileName=that.getRealPath(item);
+			
 			fs.writeFileSync(fileName,codes);
 			
 			MSG.log("文件合并完成："+path.normalize(fileName));
@@ -329,7 +353,6 @@ var command = {
 
 	});
 })();
-
 
 
 
