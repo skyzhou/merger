@@ -87,7 +87,7 @@ var Map=function(dir,build){
 		
 	};
 	this.getRealPath = function(p){
-		return path.normalize(/\:/.test(p)?p:_path+p);
+		return path.normalize(/\:|^\//.test(p)?p:_path+p);
 	}
 	//获取文件列表
 	this.getFileList = function(fileList){
