@@ -87,13 +87,13 @@ var Map=function(dir,build){
 		
 	};
 	this.getRealPath = function(p){
-		return path.normalize(/\:|^\//.test(p)?p:_path+p);
+		return path.normalize(/\:|^\//.test(p)?p:_path+'/'+p);
 	}
 	//获取文件列表
 	this.getFileList = function(fileList){
 		var files = [];
 		fileList && fileList.forEach(function(item){
-			if(fs.existsSync(that.getRealPath('/'+item))){
+			if(fs.existsSync(that.getRealPath(item))){
 				if(fs.statSync(that.getRealPath(item)).isDirectory()){
 					
 					var items = fs.readdirSync(that.getRealPath(item));
@@ -111,7 +111,7 @@ var Map=function(dir,build){
 				}
 			}
 			else{
-				MSG.log(that.getRealPath('/'+item)+' does not exist',1);
+				MSG.log(that.getRealPath(item)+' does not exist',1);
 			}
 		});
 		
