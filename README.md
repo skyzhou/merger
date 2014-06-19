@@ -63,7 +63,7 @@ merger.js是什么？
 
 window平台的merger.exe
 -------------
-	可以使用Quick Batch File讲node.exe,merger.js,compiler.jar打包生成exe文件。
+	可以使用Quick Batch File将node.exe,merger.js,compiler.jar打包生成exe文件。
 	
 	//
 	@echo off
